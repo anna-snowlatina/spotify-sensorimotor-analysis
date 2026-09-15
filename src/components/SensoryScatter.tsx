@@ -25,10 +25,34 @@ function topLoadingLabel(loading: number[], dims: string[]): string {
     .join(', ');
 }
 
+/** The dimension with the strongest loading in the given direction (for describing a PC axis's poles). */
+function polarityDim(loading: number[], dims: string[], positive: boolean): string {
+  let bestIdx = 0;
+  for (let i = 1; i < loading.length; i++) {
+    if (positive ? loading[i] > loading[bestIdx] : loading[i] < loading[bestIdx]) bestIdx = i;
+  }
+  return dims[bestIdx];
+}
+
+/** Plain-language read of where a window's tracks sit on average in PCA space. */
+function interpretWindowPosition(
+  meanPc1: number,
+  meanPc2: number,
+  loadings: number[][],
+  dims: string[],
+): string {
+  const NEAR = 0.2;
+  const pc1Word =
+    Math.abs(meanPc1) < NEAR ? 'near average on PC1' : `toward ${polarityDim(loadings[0], dims, meanPc1 > 0)} on PC1`;
+  const pc2Word =
+    Math.abs(meanPc2) < NEAR ? 'near average on PC2' : `toward ${polarityDim(loadings[1], dims, meanPc2 > 0)} on PC2`;
+  return `tracks sit ${pc1Word} and ${pc2Word}, on average`;
+}
+
 export function SensoryScatter({ data, norms }: { data: TopData; norms: Norms }) {
   const [selected, setSelected] = useState<PlottedTrack | null>(null);
 
-  const { points, pcaResult } = useMemo(() => {
+  const { points, pcaResult, windowMeans } = useMemo(() => {
     const entries: { window: Window; score: TrackScore }[] = [];
     for (const w of WINDOWS) {
       for (const score of scoreTracks(data[w].tracks, norms)) {
@@ -54,7 +78,17 @@ export function SensoryScatter({ data, norms }: { data: TopData; norms: Norms })
       y: yScale(result.scores[i][1]),
     }));
 
-    return { points: plotted, pcaResult: result };
+    const windowMeans: Partial<Record<Window, { pc1: number; pc2: number }>> = {};
+    for (const w of WINDOWS) {
+      const indices = entries.map((e, i) => (e.window === w ? i : -1)).filter((i) => i >= 0);
+      if (indices.length === 0) continue;
+      windowMeans[w] = {
+        pc1: indices.reduce((s, i) => s + result.scores[i][0], 0) / indices.length,
+        pc2: indices.reduce((s, i) => s + result.scores[i][1], 0) / indices.length,
+      };
+    }
+
+    return { points: plotted, pcaResult: result, windowMeans };
   }, [data, norms]);
 
   if (points.length === 0) {
@@ -98,6 +132,28 @@ export function SensoryScatter({ data, norms }: { data: TopData; norms: Norms })
             />
           ))}
         </svg>
+
+        <div style={{ flex: '1 1 200px', minWidth: 200, fontSize: 13 }}>
+          <h4 style={{ margin: '0 0 4px' }}>What this shows</h4>
+          <p style={{ margin: '0 0 4px' }}>
+            Horizontal axis ({pc1Label}); vertical axis ({pc2Label}). Click a point for word-level
+            detail.
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {WINDOWS.map((w) => {
+              const mean = windowMeans[w];
+              return (
+                <li key={w} style={{ marginBottom: 6 }}>
+                  <span style={{ color: WINDOW_COLOR[w], fontWeight: 600 }}>{w.replace('_', ' ')}</span>
+                  {': '}
+                  {mean
+                    ? interpretWindowPosition(mean.pc1, mean.pc2, pcaResult.loadings, norms.dims)
+                    : 'no scored titles for this window.'}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
         {selected && (
           <div className="card" style={{ minWidth: 220, flex: '1 1 220px' }}>

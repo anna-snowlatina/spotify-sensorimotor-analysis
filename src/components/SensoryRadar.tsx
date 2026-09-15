@@ -21,6 +21,29 @@ function pointAt(angle: number, radius: number): [number, number] {
   return [CENTER + radius * Math.cos(angle), CENTER + radius * Math.sin(angle)];
 }
 
+function formatZ(z: number): string {
+  return `${z >= 0 ? '+' : ''}${z.toFixed(1)}`;
+}
+
+/** Plain-language read of a window's z-scored profile: what it leans toward and away from. */
+function interpretProfile(dims: string[], profile: number[]): string {
+  const ranked = dims.map((dim, i) => ({ dim, z: profile[i] })).sort((a, b) => b.z - a.z);
+  const high = ranked.slice(0, 2).filter((d) => d.z > 0.15);
+  const low = ranked.slice(-2).filter((d) => d.z < -0.15);
+
+  const parts: string[] = [];
+  if (high.length > 0) {
+    parts.push(`leans ${high.map((d) => `${d.dim} (${formatZ(d.z)})`).join(' and ')}`);
+  }
+  if (low.length > 0) {
+    parts.push(`below average on ${low.map((d) => `${d.dim} (${formatZ(d.z)})`).join(' and ')}`);
+  }
+  if (parts.length === 0) {
+    return 'close to an average English word across all dimensions.';
+  }
+  return `${parts.join('; ')}, relative to an average English word.`;
+}
+
 export function SensoryRadar({ dims, profiles }: Props) {
   const domainMax = Math.max(
     2,
@@ -39,6 +62,7 @@ export function SensoryRadar({ dims, profiles }: Props) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Sensory radar</h3>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
       <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ maxWidth: '100%', height: 'auto' }}>
         {/* zero ring */}
         <polygon
@@ -106,22 +130,21 @@ export function SensoryRadar({ dims, profiles }: Props) {
         })}
       </svg>
 
-      <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
-        {WINDOWS.map((w) => (
-          <span key={w} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                background: WINDOW_COLOR[w],
-                display: 'inline-block',
-              }}
-            />
-            {w.replace('_', ' ')}
-            {!profiles[w] && ' (no data)'}
-          </span>
-        ))}
+      <div style={{ flex: '1 1 200px', minWidth: 200, fontSize: 13 }}>
+        <h4 style={{ margin: '0 0 4px' }}>What this shows</h4>
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {WINDOWS.map((w) => {
+            const profile = profiles[w];
+            return (
+              <li key={w} style={{ marginBottom: 6 }}>
+                <span style={{ color: WINDOW_COLOR[w], fontWeight: 600 }}>{w.replace('_', ' ')}</span>
+                {': '}
+                {profile ? interpretProfile(dims, profile) : 'no scored titles for this window.'}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
       </div>
     </div>
   );

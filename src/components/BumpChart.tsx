@@ -23,11 +23,16 @@ type PlottedItem = {
   fadesOut: boolean;
 };
 
-const MARGIN = { top: 24, right: 60, bottom: 16, left: 24 };
+const MARGIN_TOP = 50;
+const MARGIN_BOTTOM = 16;
+const MARGIN_LEFT = 24;
+const MARGIN_RIGHT_ARTISTS = 60;
+const MARGIN_RIGHT_TRACKS = 260;
 const COLUMN_GAP = 260;
 const ROW_HEIGHT = 22;
 const IMG_SIZE = 20;
 const STUB_LENGTH = 26;
+const DISPLAY_LIMIT = 20;
 
 const CATEGORY_COLOR: Record<Category, string> = {
   stalwart: '#1db954',
@@ -144,31 +149,29 @@ export function BumpChart({
   caption?: string;
 }) {
   const [mode, setMode] = useState<Mode>('artists');
-  const [showAll, setShowAll] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  const displayLimit = showAll ? 50 : 20;
-
-  const width = MARGIN.left + MARGIN.right + COLUMN_GAP * (columns.length - 1);
+  const marginRight = mode === 'tracks' ? MARGIN_RIGHT_TRACKS : MARGIN_RIGHT_ARTISTS;
+  const width = MARGIN_LEFT + marginRight + COLUMN_GAP * (columns.length - 1);
 
   const xForColumn = (key: string) =>
-    MARGIN.left + columns.findIndex((c) => c.key === key) * COLUMN_GAP;
+    MARGIN_LEFT + columns.findIndex((c) => c.key === key) * COLUMN_GAP;
 
   const plotted = useMemo(() => {
-    // First pass to find the max rank we'll actually need to plot (may exceed displayLimit
+    // First pass to find the max rank we'll actually need to plot (may exceed DISPLAY_LIMIT
     // when an item qualifies via one column but has a much worse rank in another).
     const maxRank = Math.max(
-      displayLimit,
-      ...columns.flatMap((c) => c[mode].filter((i) => i.rank <= displayLimit).map((i) => i.rank)),
+      DISPLAY_LIMIT,
+      ...columns.flatMap((c) => c[mode].filter((i) => i.rank <= DISPLAY_LIMIT).map((i) => i.rank)),
     );
-    const yScale = scaleLinear().domain([1, maxRank]).range([MARGIN.top, MARGIN.top + (maxRank - 1) * ROW_HEIGHT]);
-    return buildPlottedItems(columns, mode, displayLimit, (rank) => yScale(rank), xForColumn);
-  }, [columns, mode, displayLimit]);
+    const yScale = scaleLinear().domain([1, maxRank]).range([MARGIN_TOP, MARGIN_TOP + (maxRank - 1) * ROW_HEIGHT]);
+    return buildPlottedItems(columns, mode, DISPLAY_LIMIT, (rank) => yScale(rank), xForColumn);
+  }, [columns, mode]);
 
   const maxY = plotted.length
     ? Math.max(...plotted.flatMap((p) => p.points.map((pt) => pt.y)))
-    : MARGIN.top;
-  const height = maxY + MARGIN.bottom + ROW_HEIGHT;
+    : MARGIN_TOP;
+  const height = maxY + MARGIN_BOTTOM + ROW_HEIGHT;
 
   return (
     <div className="card">
@@ -191,10 +194,6 @@ export function BumpChart({
               onChange={(e) => setMode(e.target.checked ? 'tracks' : 'artists')}
             />{' '}
             Show tracks (else artists)
-          </label>
-          <label>
-            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />{' '}
-            Show all 50 (else top 20)
           </label>
         </div>
       </div>
@@ -290,7 +289,8 @@ export function BumpChart({
                     fontSize={12}
                     fill="var(--text-h)"
                   >
-                    {p.name} (#{pt.rank})
+                    {p.name}
+                    {pt.item.artistNames && ` — ${pt.item.artistNames.join(', ')}`} (#{pt.rank})
                   </text>
                 ))}
             </g>

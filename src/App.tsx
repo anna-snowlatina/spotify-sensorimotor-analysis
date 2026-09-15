@@ -10,6 +10,7 @@ import { TitleMatchDebug } from './components/TitleMatchDebug';
 import { SensoryPanel } from './components/SensoryPanel';
 import { SensoryScatter } from './components/SensoryScatter';
 import { DriftStat } from './components/DriftStat';
+import spotifyLogo from './assets/spotify-logo.svg';
 
 const WINDOW_LABELS: Record<Window, string> = {
   long_term: 'Long term (~1 year)',
@@ -122,26 +123,34 @@ function TopDataView() {
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h1>Taste Drift</h1>
-        <button type="button" onClick={logout}>
-          Log out
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img src={spotifyLogo} alt="" className="logo" />
+          <h1 style={{ margin: 0 }}>Taste Drift & Sensorimotor Map</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => {
+              forceExpiredAccessToken();
+              void load(true);
+            }}
+            style={{ fontSize: 11, padding: '4px 10px' }}
+          >
+            Debug: force 401
+          </button>
+          <button type="button" onClick={logout}>
+            Log out
+          </button>
+        </div>
       </header>
 
-      <p>Cache: {formatAge(cacheAge)} (6h TTL)</p>
+      <p style={{ fontSize: 11, opacity: 0.5, margin: '4px 0 16px' }}>
+        Cache: {formatAge(cacheAge)} (6h TTL)
+      </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => void load(true)}>
+        <button type="button" className="primary" onClick={() => void load(true)}>
           Refresh data
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            forceExpiredAccessToken();
-            void load(true);
-          }}
-        >
-          Debug: force 401 (test refresh)
         </button>
         <button type="button" onClick={toggleRevealRefreshToken}>
           {revealedRefreshToken ? 'Hide' : 'Debug: reveal'} refresh token
@@ -177,20 +186,21 @@ function TopDataView() {
       {status.kind === 'error' && <p className="error">Error: {status.message}</p>}
       {status.kind === 'ready' && bumpColumns && (
         <>
-          <label style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
-            <input
-              type="checkbox"
-              checked={includeSnapshots}
-              onChange={(e) => setIncludeSnapshots(e.target.checked)}
-            />{' '}
-            Include saved snapshots as additional bump chart columns ({loadSnapshots().length} saved)
-          </label>
-          <BumpChart
-            columns={bumpColumns}
-            caption="Windows overlap: long_term includes the last several months of listening, so the three live columns are not independent periods. Snapshot columns (if shown) are independent single-day captures."
-          />
+          <TopFiveSummary data={status.data} />
+
           <div style={{ marginTop: 16 }}>
-            <TopFiveSummary data={status.data} />
+            <label style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                checked={includeSnapshots}
+                onChange={(e) => setIncludeSnapshots(e.target.checked)}
+              />{' '}
+              Include saved snapshots as additional bump chart columns ({loadSnapshots().length} saved)
+            </label>
+            <BumpChart
+              columns={bumpColumns}
+              caption="Windows overlap: long_term includes the last several months of listening, so the three live columns are not independent periods. Snapshot columns (if shown) are independent single-day captures."
+            />
           </div>
 
           {normsError && <p className="error">Error loading norms: {normsError}</p>}
@@ -219,11 +229,24 @@ function TopDataView() {
 function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   return (
-    <main className="card" style={{ margin: 32, textAlign: 'center' }}>
-      <h1>Taste Drift</h1>
+    <main
+      style={{
+        minHeight: '100svh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        textAlign: 'center',
+        padding: 24,
+      }}
+    >
+      <img src={spotifyLogo} alt="" style={{ height: 64, width: 'auto' }} />
+      <h1 style={{ margin: 0 }}>Taste Drift & Sensorimotor Map</h1>
       <p>See how your Spotify taste is shifting.</p>
       <button
         type="button"
+        className="primary"
         onClick={() => {
           login().catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
         }}

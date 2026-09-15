@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { WINDOWS, type RankedItem, type TopData, type Window } from '../data/topItems';
 
 type Mode = 'artists' | 'tracks';
@@ -10,6 +11,46 @@ const WINDOW_LABEL: Record<Window, string> = {
 
 function displayName(item: RankedItem): string {
   return item.artistNames ? `${item.name} — ${item.artistNames.join(', ')}` : item.name;
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('');
+}
+
+const AVATAR_SIZE = 24;
+
+function Avatar({ item }: { item: RankedItem }) {
+  const style: CSSProperties = {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: '50%',
+    objectFit: 'cover',
+    flexShrink: 0,
+  };
+  if (item.imageUrl) {
+    return <img src={item.imageUrl} alt="" style={style} />;
+  }
+  return (
+    <span
+      style={{
+        ...style,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-raised-hover)',
+        color: 'var(--text-h)',
+        fontSize: 10,
+        fontWeight: 700,
+      }}
+    >
+      {initials(item.name)}
+    </span>
+  );
 }
 
 function narrativeFor(data: TopData, mode: Mode): string {
@@ -44,7 +85,17 @@ function TopFiveList({ data, mode }: { data: TopData; mode: Mode }) {
           <h4 style={{ margin: '0 0 4px' }}>{WINDOW_LABEL[w]}</h4>
           <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>
             {data[w][mode].slice(0, 5).map((item) => (
-              <li key={item.id}>{displayName(item)}</li>
+              <li
+                key={item.id}
+                style={
+                  mode === 'artists'
+                    ? { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }
+                    : { marginBottom: 4 }
+                }
+              >
+                {mode === 'artists' && <Avatar item={item} />}
+                {displayName(item)}
+              </li>
             ))}
           </ol>
         </div>
