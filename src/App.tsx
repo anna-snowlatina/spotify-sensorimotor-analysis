@@ -64,6 +64,7 @@ function TopDataView() {
   const { norms, error: normsError } = useNorms();
   const [includeSnapshots, setIncludeSnapshots] = useState(false);
   const [revealedRefreshToken, setRevealedRefreshToken] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
   async function load(forceRefresh: boolean) {
     setStatus({ kind: 'loading' });
@@ -90,6 +91,7 @@ function TopDataView() {
   }
 
   function toggleRevealRefreshToken() {
+    setCopyStatus(null);
     if (revealedRefreshToken) {
       setRevealedRefreshToken(null);
       return;
@@ -153,7 +155,21 @@ function TopDataView() {
             <code>SPOTIFY_REFRESH_TOKEN=...</code>. Treat it like a password (scope is limited to{' '}
             <code>user-top-read</code>) — never commit it.
           </p>
-          <pre style={{ userSelect: 'all' }}>{revealedRefreshToken}</pre>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <pre style={{ margin: 0, flex: '1 1 auto', overflowWrap: 'anywhere' }}>{revealedRefreshToken}</pre>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard
+                  .writeText(revealedRefreshToken)
+                  .then(() => setCopyStatus('Copied!'))
+                  .catch(() => setCopyStatus('Copy failed — select the text manually.'));
+              }}
+            >
+              Copy
+            </button>
+          </div>
+          {copyStatus && <p style={{ fontSize: 12, color: 'var(--text)' }}>{copyStatus}</p>}
         </div>
       )}
 
