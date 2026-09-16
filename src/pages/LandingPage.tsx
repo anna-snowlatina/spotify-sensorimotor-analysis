@@ -1,28 +1,117 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { login, isLoggedIn, hasScopes } from '../auth/pkce';
 import { useNowPlaying } from '../nowplaying/useNowPlaying';
 import { NowPlayingCard } from '../components/NowPlayingCard';
 import { DebugOverlay } from '../components/DebugOverlay';
+import { AmbientChrome } from '../components/AmbientChrome';
 import { loadAndExtractPalette, NEUTRAL_PALETTE, type Palette } from '../palette/extract';
 import { getCachedPalette, setCachedPalette } from '../palette/cache';
 import type { NowPlaying } from '../nowplaying/api';
 import { AmbientCanvas, type PlaybackPhase } from '../canvas/AmbientCanvas';
 import spotifyLogo from '../assets/spotify-logo.svg';
 
+const REQUIRED_SCOPES = ['user-read-currently-playing'];
+
 function phaseFor(nowPlaying: NowPlaying): PlaybackPhase {
   if (nowPlaying.state === 'playing') return 'playing';
   if (nowPlaying.state === 'paused') return 'paused';
-  return 'quiet';
+  return 'quiet'; // idle or unavailable
 }
 
-const REQUIRED_SCOPES = ['user-read-currently-playing'];
+function activeId(nowPlaying: NowPlaying): string | null {
+  return nowPlaying.state === 'playing' || nowPlaying.state === 'paused' ? nowPlaying.id : null;
+}
+
+function activeArtUrl(nowPlaying: NowPlaying): string | undefined {
+  if (nowPlaying.state !== 'playing' && nowPlaying.state !== 'paused') return undefined;
+  return nowPlaying.artUrlSmall ?? nowPlaying.artUrlLarge;
+}
+
+/**
+ * Palette for the canvas: fresh extraction while playing/paused, the neutral palette when truly
+ * idle, and the last real palette (just slowed via `phase`) while "unavailable" (ad/private/local
+ * file) — per the states table, unavailable keeps the previous palette rather than resetting.
+ */
+function usePalette(nowPlaying: NowPlaying): Palette {
+  const [palette, setPalette] = useState<Palette>(NEUTRAL_PALETTE);
+  const lastPaletteRef = useRef<Palette>(NEUTRAL_PALETTE);
+  const id = activeId(nowPlaying);
+  const artUrl = activeArtUrl(nowPlaying);
+
+  useEffect(() => {
+    if (nowPlaying.state === 'idle') {
+      setPalette(NEUTRAL_PALETTE);
+      return;
+    }
+    if (nowPlaying.state === 'unavailable') {
+      setPalette(lastPaletteRef.current);
+      return;
+    }
+    if (!id || !artUrl) {
+      setPalette(NEUTRAL_PALETTE);
+      return;
+    }
+
+    const cached = getCachedPalette(id);
+    if (cached) {
+      lastPaletteRef.current = cached;
+      setPalette(cached);
+      return;
+    }
+
+    let cancelled = false;
+    void loadAndExtractPalette(artUrl, id).then((result) => {
+      if (cancelled) return;
+      const resolved = result ?? NEUTRAL_PALETTE;
+      if (result) setCachedPalette(id, result);
+      lastPaletteRef.current = resolved;
+      setPalette(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [nowPlaying.state, id, artUrl]);
+
+  return palette;
+}
+
+/** Remembers the last playing/paused track's art, so "unavailable" can show it dimmed. */
+function useLastArtUrl(nowPlaying: NowPlaying): string | undefined {
+  const ref = useRef<string | undefined>(undefined);
+  const url = activeArtUrl(nowPlaying);
+  if (url) ref.current = url;
+  return ref.current;
+}
+
+function ReportLink() {
+  return (
+    <Link
+      to="/report"
+      className="primary"
+      style={{
+        position: 'fixed',
+        top: 16,
+        right: 16,
+        textDecoration: 'none',
+        padding: '8px 20px',
+        borderRadius: 500,
+        fontWeight: 700,
+        zIndex: 1,
+      }}
+    >
+      Taste report →
+    </Link>
+  );
+}
 
 function ConnectOverlay({ reconnect }: { reconnect: boolean }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <div
       style={{
+        position: 'relative',
+        zIndex: 1,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -50,76 +139,10 @@ function ConnectOverlay({ reconnect }: { reconnect: boolean }) {
   );
 }
 
-function activeId(nowPlaying: NowPlaying): string | null {
-  return nowPlaying.state === 'playing' || nowPlaying.state === 'paused' ? nowPlaying.id : null;
-}
-
-function activeArtUrl(nowPlaying: NowPlaying): string | undefined {
-  if (nowPlaying.state !== 'playing' && nowPlaying.state !== 'paused') return undefined;
-  return nowPlaying.artUrlSmall ?? nowPlaying.artUrlLarge;
-}
-
-/** Extracts (or reuses a cached) palette keyed by track/episode id, ignoring progress-only updates. */
-function usePalette(nowPlaying: NowPlaying): Palette {
-  const [palette, setPalette] = useState<Palette>(NEUTRAL_PALETTE);
-  const id = activeId(nowPlaying);
-  const artUrl = activeArtUrl(nowPlaying);
-
-  useEffect(() => {
-    if (!id || !artUrl) {
-      setPalette(NEUTRAL_PALETTE);
-      return;
-    }
-
-    const cached = getCachedPalette(id);
-    if (cached) {
-      setPalette(cached);
-      return;
-    }
-
-    let cancelled = false;
-    void loadAndExtractPalette(artUrl, id).then((result) => {
-      if (cancelled) return;
-      if (result) {
-        setCachedPalette(id, result);
-        setPalette(result);
-      } else {
-        setPalette(NEUTRAL_PALETTE);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, artUrl]);
-
-  return palette;
-}
-
-/** TEMPORARY (phase 3): lets the owner eyeball the extracted palette across many songs. */
-function PaletteSwatchStrip({ palette }: { palette: Palette }) {
-  return (
-    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 12 }}>
-      <div
-        title={`background ${palette.background}`}
-        style={{ width: 28, height: 28, borderRadius: 6, background: palette.background, border: '1px solid var(--border)' }}
-      />
-      {palette.colors.map((c, i) => (
-        <div
-          key={i}
-          title={c}
-          style={{ width: 28, height: 28, borderRadius: 6, background: c, border: '1px solid var(--border)' }}
-        />
-      ))}
-      {palette.isMonochrome && (
-        <span style={{ fontSize: 11, color: 'var(--text)', alignSelf: 'center', marginLeft: 6 }}>monochrome</span>
-      )}
-    </div>
-  );
-}
-
 function ConnectedLanding() {
   const { nowPlaying, quotaPaused, debug } = useNowPlaying();
   const palette = usePalette(nowPlaying);
+  const lastArtUrl = useLastArtUrl(nowPlaying);
   const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
@@ -133,28 +156,30 @@ function ConnectedLanding() {
   return (
     <>
       <AmbientCanvas palette={palette} phase={phaseFor(nowPlaying)} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <NowPlayingCard nowPlaying={nowPlaying} />
-        <PaletteSwatchStrip palette={palette} />
-      </div>
-      {quotaPaused && (
-        <p
-          style={{
-            position: 'fixed',
-            bottom: 16,
-            right: 16,
-            fontSize: 12,
-            color: 'var(--text)',
-            background: 'var(--bg-raised)',
-            padding: '6px 12px',
-            borderRadius: 8,
-            zIndex: 1,
-          }}
-        >
-          Spotify quota reached — paused
-        </p>
-      )}
-      {showDebug && <DebugOverlay stats={debug} />}
+      <AmbientChrome>
+        <ReportLink />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <NowPlayingCard nowPlaying={nowPlaying} lastArtUrl={lastArtUrl} />
+        </div>
+        {quotaPaused && (
+          <p
+            style={{
+              position: 'fixed',
+              bottom: 16,
+              right: 16,
+              fontSize: 12,
+              color: 'var(--text)',
+              background: 'var(--bg-raised)',
+              padding: '6px 12px',
+              borderRadius: 8,
+              zIndex: 1,
+            }}
+          >
+            Spotify quota reached — paused
+          </p>
+        )}
+      </AmbientChrome>
+      {showDebug && <DebugOverlay stats={debug} palette={palette} />}
     </>
   );
 }
@@ -162,6 +187,7 @@ function ConnectedLanding() {
 export default function LandingPage() {
   const loggedIn = isLoggedIn();
   const needsReconnect = loggedIn && !hasScopes(REQUIRED_SCOPES);
+  const showConnect = !loggedIn || needsReconnect;
 
   return (
     <main
@@ -172,27 +198,18 @@ export default function LandingPage() {
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
-        background: 'var(--bg)',
+        overflow: 'hidden',
       }}
     >
-      <Link
-        to="/report"
-        className="primary"
-        style={{
-          position: 'fixed',
-          top: 16,
-          right: 16,
-          textDecoration: 'none',
-          padding: '8px 20px',
-          borderRadius: 500,
-          fontWeight: 700,
-          zIndex: 1,
-        }}
-      >
-        Taste report →
-      </Link>
-
-      {!loggedIn || needsReconnect ? <ConnectOverlay reconnect={needsReconnect} /> : <ConnectedLanding />}
+      {showConnect ? (
+        <>
+          <AmbientCanvas palette={NEUTRAL_PALETTE} phase="quiet" />
+          <ReportLink />
+          <ConnectOverlay reconnect={needsReconnect} />
+        </>
+      ) : (
+        <ConnectedLanding />
+      )}
     </main>
   );
 }
