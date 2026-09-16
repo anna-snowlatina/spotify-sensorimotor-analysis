@@ -17,24 +17,40 @@ export function NowPlayingCard({
   lastArtUrl,
 }: {
   nowPlaying: NowPlaying;
-  /** Last known artwork, shown dimmed during a temporary "unavailable" state (ad/private/local file). */
+  /** Last known artwork, shown dimmed while idle (nothing playing) or temporarily unavailable. */
   lastArtUrl?: string;
 }) {
   if (nowPlaying.state === 'idle') {
     return (
       <div style={{ textAlign: 'center', color: 'var(--text)' }}>
-        <div
-          style={{
-            width: ART_SIZE,
-            height: ART_SIZE,
-            maxWidth: 200,
-            maxHeight: 200,
-            borderRadius: 8,
-            background: 'var(--bg-raised)',
-            margin: '0 auto 12px',
-            opacity: 0.4,
-          }}
-        />
+        {lastArtUrl ? (
+          <img
+            src={lastArtUrl}
+            alt=""
+            style={{
+              width: ART_SIZE,
+              height: ART_SIZE,
+              objectFit: 'contain',
+              borderRadius: 8,
+              margin: '0 auto 12px',
+              display: 'block',
+              opacity: 0.4,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: ART_SIZE,
+              height: ART_SIZE,
+              maxWidth: 200,
+              maxHeight: 200,
+              borderRadius: 8,
+              background: 'var(--bg-raised)',
+              margin: '0 auto 12px',
+              opacity: 0.4,
+            }}
+          />
+        )}
         <p>Nothing playing</p>
       </div>
     );

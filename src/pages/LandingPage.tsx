@@ -9,6 +9,8 @@ import { loadAndExtractPalette, NEUTRAL_PALETTE, type Palette } from '../palette
 import { getCachedPalette, setCachedPalette } from '../palette/cache';
 import type { NowPlaying } from '../nowplaying/api';
 import { AmbientCanvas, type PlaybackPhase } from '../canvas/AmbientCanvas';
+import { useTempo } from '../tempo/useTempo';
+import { paceFactor, DEFAULT_BPM } from '../tempo/pace';
 import spotifyLogo from '../assets/spotify-logo.svg';
 
 const REQUIRED_SCOPES = ['user-read-currently-playing'];
@@ -84,6 +86,17 @@ function useLastArtUrl(nowPlaying: NowPlaying): string | undefined {
   return ref.current;
 }
 
+function tempoLabel(bpm: number | null, source: string): string {
+  if (bpm === null) return '♩ —';
+  const rounded = Math.round(bpm);
+  if (source === 'override') return `♩ ${rounded} BPM (override)`;
+  // Deezer's terms require following their trademark guidelines; ReccoBeats' terms don't
+  // specify, but attributing both consistently is the conservative choice either way.
+  if (source === 'deezer') return `♩ ${rounded} BPM · via Deezer`;
+  if (source === 'reccobeats') return `♩ ${rounded} BPM · via ReccoBeats`;
+  return `♩ ${rounded} BPM`;
+}
+
 function ReportLink() {
   return (
     <Link
@@ -145,22 +158,46 @@ function ConnectedLanding() {
   const lastArtUrl = useLastArtUrl(nowPlaying);
   const [showDebug, setShowDebug] = useState(false);
 
+  const trackId = activeId(nowPlaying);
+  const isrc =
+    (nowPlaying.state === 'playing' || nowPlaying.state === 'paused') && nowPlaying.kind === 'track'
+      ? nowPlaying.isrc
+      : undefined;
+  const itemType =
+    nowPlaying.state === 'playing' || nowPlaying.state === 'paused'
+      ? nowPlaying.kind === 'track'
+        ? ('track' as const)
+        : ('episode' as const)
+      : ('other' as const);
+  const { tempo, cacheHit, applyOverride, clearOverride } = useTempo(trackId, isrc, itemType);
+  const [breathEnabled, setBreathEnabled] = useState(true);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'd' || e.key === 'D') setShowDebug((v) => !v);
+      else if (e.key === '[') applyOverride('half');
+      else if (e.key === ']') applyOverride('double');
+      else if (e.key === '\\') clearOverride();
+      else if (e.key === 'b' || e.key === 'B') setBreathEnabled((v) => !v);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [applyOverride, clearOverride]);
 
   return (
     <>
-      <AmbientCanvas palette={palette} phase={phaseFor(nowPlaying)} />
+      <AmbientCanvas palette={palette} phase={phaseFor(nowPlaying)} tempo={tempo} breathEnabled={breathEnabled} />
+      {/* Track info stays visible for as long as it's relevant, unlike the auto-hiding chrome below. */}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <NowPlayingCard nowPlaying={nowPlaying} lastArtUrl={lastArtUrl} />
+        {(nowPlaying.state === 'playing' || nowPlaying.state === 'paused') && (
+          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text)', marginTop: 4 }}>
+            {tempoLabel(tempo.bpm, tempo.source)}
+          </p>
+        )}
+      </div>
       <AmbientChrome>
         <ReportLink />
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <NowPlayingCard nowPlaying={nowPlaying} lastArtUrl={lastArtUrl} />
-        </div>
         {quotaPaused && (
           <p
             style={{
@@ -179,7 +216,16 @@ function ConnectedLanding() {
           </p>
         )}
       </AmbientChrome>
-      {showDebug && <DebugOverlay stats={debug} palette={palette} />}
+      {showDebug && (
+        <DebugOverlay
+          stats={debug}
+          palette={palette}
+          tempo={tempo}
+          tempoCacheHit={cacheHit}
+          paceFactorValue={paceFactor(tempo.bpm ?? DEFAULT_BPM)}
+          breathEnabled={breathEnabled}
+        />
+      )}
     </>
   );
 }

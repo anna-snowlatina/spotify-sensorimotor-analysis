@@ -1,5 +1,6 @@
 import type { DebugStats } from '../nowplaying/useNowPlaying';
 import type { Palette } from '../palette/extract';
+import type { TempoInfo } from '../tempo/lookup';
 
 function formatWhen(ms: number | null): string {
   if (ms === null) return '—';
@@ -26,7 +27,21 @@ function PaletteSwatches({ palette }: { palette: Palette }) {
   );
 }
 
-export function DebugOverlay({ stats, palette }: { stats: DebugStats; palette?: Palette }) {
+export function DebugOverlay({
+  stats,
+  palette,
+  tempo,
+  tempoCacheHit,
+  paceFactorValue,
+  breathEnabled,
+}: {
+  stats: DebugStats;
+  palette?: Palette;
+  tempo?: TempoInfo;
+  tempoCacheHit?: boolean;
+  paceFactorValue?: number;
+  breathEnabled?: boolean;
+}) {
   return (
     <div
       style={{
@@ -48,6 +63,17 @@ export function DebugOverlay({ stats, palette }: { stats: DebugStats; palette?: 
       <div>last status: {stats.lastStatus ?? '—'}</div>
       <div>next poll: {formatWhen(stats.nextPollAt)}</div>
       {palette && <PaletteSwatches palette={palette} />}
+      {tempo && (
+        <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+          <div>bpm: {tempo.bpm ?? '—'}</div>
+          <div>source: {tempo.source}</div>
+          <div>cache: {tempoCacheHit ? 'hit' : 'miss'}</div>
+          {tempo.energy !== undefined && <div>energy: {tempo.energy.toFixed(2)}</div>}
+          {tempo.valence !== undefined && <div>valence: {tempo.valence.toFixed(2)}</div>}
+          {paceFactorValue !== undefined && <div>pace: {paceFactorValue.toFixed(2)}×</div>}
+          {breathEnabled !== undefined && <div>breath: {breathEnabled ? 'on' : 'off'}</div>}
+        </div>
+      )}
     </div>
   );
 }

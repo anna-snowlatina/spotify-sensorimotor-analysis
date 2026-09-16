@@ -20,7 +20,12 @@ export function AmbientChrome({ children }: { children: ReactNode }) {
   const [visible, setVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
 
+  // Deliberately runs once (empty deps): re-running this effect on every parent re-render
+  // (which happens on every now-playing poll) would reset the idle timer each time, making the
+  // whole UI flicker in and out on the poll cadence instead of only on real user activity.
   useEffect(() => {
     function resetTimer() {
       setVisible(true);
@@ -30,7 +35,7 @@ export function AmbientChrome({ children }: { children: ReactNode }) {
 
     function onKeyDown(e: KeyboardEvent) {
       resetTimer();
-      if (e.key === 'r' || e.key === 'R') navigate('/report');
+      if (e.key === 'r' || e.key === 'R') navigateRef.current('/report');
       else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
       else if (e.key === 'Escape' && document.fullscreenElement) void document.exitFullscreen();
     }
@@ -46,7 +51,7 @@ export function AmbientChrome({ children }: { children: ReactNode }) {
       window.removeEventListener('keydown', onKeyDown);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     document.body.style.cursor = visible ? '' : 'none';

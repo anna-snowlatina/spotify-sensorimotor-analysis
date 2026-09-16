@@ -15,6 +15,8 @@ export type NowPlaying =
       progressMs: number;
       durationMs: number;
       fetchedAt: number;
+      /** ISRC, track items only (used for third-party tempo lookups). */
+      isrc?: string;
     };
 
 type SpotifyImage = { url: string; height: number | null; width: number | null };
@@ -26,6 +28,7 @@ type RawTrackItem = {
   artists: { name: string }[];
   album?: { images?: SpotifyImage[] };
   external_urls: { spotify: string };
+  external_ids?: { isrc?: string };
 };
 
 type RawEpisodeItem = {
@@ -75,6 +78,7 @@ function normalize(json: CurrentlyPlayingResponse | null): NowPlaying {
       progressMs: json.progress_ms ?? 0,
       durationMs: item.duration_ms,
       fetchedAt,
+      isrc: item.external_ids?.isrc,
     };
   }
 

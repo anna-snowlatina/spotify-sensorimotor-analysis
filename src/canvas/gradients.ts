@@ -37,13 +37,15 @@ export function drawGradients(
   height: number,
   frame: TransitionFrame,
   specs: GradientSpec[],
-  timeSeconds: number,
-  cycleSeconds: number,
+  /** Accumulated fraction of a full drift cycle (e.g. 1.5 = one and a half cycles elapsed).
+   *  Integrated by the caller (gradientT += dt / cycleSeconds) so changing the cycle length
+   *  (e.g. from a tempo change) never causes a jump — see HANDOVER-tempo.md section 4. */
+  cyclePhaseTurns: number,
 ): void {
   ctx.fillStyle = oklabToHex(frame.background);
   ctx.fillRect(0, 0, width, height);
 
-  const t = (timeSeconds / cycleSeconds) * Math.PI * 2;
+  const t = cyclePhaseTurns * Math.PI * 2;
   const maxRadius = Math.max(width, height);
 
   for (let i = 0; i < specs.length; i++) {
