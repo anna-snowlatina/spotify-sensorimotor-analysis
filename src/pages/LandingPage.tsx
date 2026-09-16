@@ -7,7 +7,14 @@ import { DebugOverlay } from '../components/DebugOverlay';
 import { loadAndExtractPalette, NEUTRAL_PALETTE, type Palette } from '../palette/extract';
 import { getCachedPalette, setCachedPalette } from '../palette/cache';
 import type { NowPlaying } from '../nowplaying/api';
+import { AmbientCanvas, type PlaybackPhase } from '../canvas/AmbientCanvas';
 import spotifyLogo from '../assets/spotify-logo.svg';
+
+function phaseFor(nowPlaying: NowPlaying): PlaybackPhase {
+  if (nowPlaying.state === 'playing') return 'playing';
+  if (nowPlaying.state === 'paused') return 'paused';
+  return 'quiet';
+}
 
 const REQUIRED_SCOPES = ['user-read-currently-playing'];
 
@@ -125,7 +132,8 @@ function ConnectedLanding() {
 
   return (
     <>
-      <div>
+      <AmbientCanvas palette={palette} phase={phaseFor(nowPlaying)} />
+      <div style={{ position: 'relative', zIndex: 1 }}>
         <NowPlayingCard nowPlaying={nowPlaying} />
         <PaletteSwatchStrip palette={palette} />
       </div>
@@ -140,6 +148,7 @@ function ConnectedLanding() {
             background: 'var(--bg-raised)',
             padding: '6px 12px',
             borderRadius: 8,
+            zIndex: 1,
           }}
         >
           Spotify quota reached — paused
@@ -177,6 +186,7 @@ export default function LandingPage() {
           padding: '8px 20px',
           borderRadius: 500,
           fontWeight: 700,
+          zIndex: 1,
         }}
       >
         Taste report →
