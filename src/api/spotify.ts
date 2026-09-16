@@ -26,14 +26,14 @@ export class SpotifyAuthError extends Error {
 }
 
 /**
- * Fetches a Spotify Web API path (e.g. "/me/top/artists?...").
+ * Fetches a Spotify Web API path (e.g. "/me/top/artists?...") and returns the raw Response.
  * Handles:
  * - 401: attempts one token refresh + retry, then surfaces SpotifyAuthError.
  * - 429 with reason QUOTA_EXCEEDED: throws SpotifyQuotaError (not a normal rate limit -
  *   the app's shared developer quota is exhausted, retrying won't help soon).
  * - 429 otherwise: throws SpotifyRateLimitError with the Retry-After header.
  */
-export async function spotifyFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function spotifyFetchRaw(path: string, init?: RequestInit): Promise<Response> {
   let token = await getValidAccessToken();
   if (!token) {
     throw new SpotifyAuthError();
@@ -56,6 +56,10 @@ export async function spotifyFetch<T>(path: string, init?: RequestInit): Promise
       ...init,
       headers: { ...init?.headers, Authorization: `Bearer ${token}` },
     });
+    if (res.status === 401) {
+      clearTokens();
+      throw new SpotifyAuthError('Session expired. Please log in again.');
+    }
   }
 
   if (res.status === 429) {
@@ -73,13 +77,15 @@ export async function spotifyFetch<T>(path: string, init?: RequestInit): Promise
     throw new SpotifyRateLimitError(retryAfter);
   }
 
-  if (res.status === 401) {
-    throw new SpotifyAuthError('Session expired. Please log in again.');
-  }
-
-  if (!res.ok) {
+  if (!res.ok && res.status !== 204) {
     throw new Error(`Spotify API error ${res.status}: ${await res.text()}`);
   }
 
+  return res;
+}
+
+/** Same as spotifyFetchRaw, but parses the body as JSON. Do not use for endpoints that can return 204. */
+export async function spotifyFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await spotifyFetchRaw(path, init);
   return (await res.json()) as T;
 }

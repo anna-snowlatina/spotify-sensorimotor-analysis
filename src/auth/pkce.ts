@@ -6,16 +6,21 @@ const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string | undefined;
 const REDIRECT_URI = 'http://127.0.0.1:5173/callback';
 const AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize';
 const TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token';
-const SCOPE = 'user-top-read';
+// One login flow requests every scope either page needs.
+const SCOPES = ['user-top-read', 'user-read-currently-playing'];
+const SCOPE = SCOPES.join(' ');
 
 const VERIFIER_KEY = 'taste-drift:pkce_verifier';
 const TOKENS_KEY = 'taste-drift:tokens';
+const RETURN_TO_KEY = 'taste-drift:return_to';
 
 export type Tokens = {
   accessToken: string;
   refreshToken: string;
   /** epoch ms */
   expiresAt: number;
+  /** space-separated scopes actually granted, from the token response */
+  scope: string;
 };
 
 function assertClientId(): string {
@@ -48,7 +53,10 @@ export function getStoredTokens(): Tokens | null {
   const raw = localStorage.getItem(TOKENS_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as Tokens;
+    const parsed = JSON.parse(raw) as Partial<Tokens>;
+    if (!parsed.accessToken || !parsed.refreshToken || !parsed.expiresAt) return null;
+    // Tokens stored before scope tracking was added won't have this field.
+    return { ...parsed, scope: parsed.scope ?? '' } as Tokens;
   } catch {
     return null;
   }
@@ -62,8 +70,17 @@ export function clearTokens(): void {
   localStorage.removeItem(TOKENS_KEY);
 }
 
+/** Checks whether the stored tokens carry every scope in `required`. */
+export function hasScopes(required: string[]): boolean {
+  const tokens = getStoredTokens();
+  if (!tokens) return false;
+  const granted = new Set(tokens.scope.split(' ').filter(Boolean));
+  return required.every((s) => granted.has(s));
+}
+
 export async function login(): Promise<void> {
   const clientId = assertClientId();
+  sessionStorage.setItem(RETURN_TO_KEY, window.location.pathname);
   const verifier = randomVerifier();
   sessionStorage.setItem(VERIFIER_KEY, verifier);
   const challenge = await challengeFromVerifier(verifier);
@@ -78,6 +95,13 @@ export async function login(): Promise<void> {
   });
 
   window.location.assign(`${AUTH_ENDPOINT}?${params.toString()}`);
+}
+
+/** Reads and clears the route stored before redirecting to Spotify. Defaults to "/". */
+export function consumeReturnTo(): string {
+  const path = sessionStorage.getItem(RETURN_TO_KEY) ?? '/';
+  sessionStorage.removeItem(RETURN_TO_KEY);
+  return path;
 }
 
 /**
@@ -126,12 +150,14 @@ export async function handleCallback(searchParams: URLSearchParams): Promise<Tok
     access_token: string;
     refresh_token: string;
     expires_in: number;
+    scope: string;
   };
 
   const tokens: Tokens = {
     accessToken: json.access_token,
     refreshToken: json.refresh_token,
     expiresAt: Date.now() + json.expires_in * 1000,
+    scope: json.scope,
   };
   storeTokens(tokens);
   return tokens;
@@ -169,6 +195,7 @@ export async function refreshAccessToken(): Promise<Tokens> {
     access_token: string;
     refresh_token?: string;
     expires_in: number;
+    scope?: string;
   };
 
   const tokens: Tokens = {
@@ -176,6 +203,7 @@ export async function refreshAccessToken(): Promise<Tokens> {
     // Spotify may or may not rotate the refresh token; keep the old one if absent.
     refreshToken: json.refresh_token ?? current.refreshToken,
     expiresAt: Date.now() + json.expires_in * 1000,
+    scope: json.scope ?? current.scope,
   };
   storeTokens(tokens);
   return tokens;
